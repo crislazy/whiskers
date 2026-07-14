@@ -8,7 +8,7 @@ It can automatically update your Slack status, display Hackatime coding stats, a
 
 <p align="center">
   <img src="https://hackatime.hackclub.com/api/v1/badge/U09TNMQ9MCZ/slackselfbot" alt="Hackatime">
-  <img src="https://img.shields.io/github/license/crislazy/whiskers" alt="License">
+  <img alt="GitHub License" src="https://img.shields.io/github/license/crislazy/whiskers?style=flat">
   <a href="https://slack.dev/bolt-js/">
     <img src="https://img.shields.io/badge/Slack-Bolt-4A154B?logo=slack" alt="Slack Bolt">
   </a>
