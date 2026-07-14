@@ -210,7 +210,10 @@ Only the users listed in **USER_ID** and **PERMITTED_USER_IDS** can use these co
 
 ## Screenshots
 
-PLACEHOLDER
+![whiskers](https://cdn.hackclub.com/019f6221-9c27-7d79-9ece-6946549c53eb/whiskers.PNG)<br>
+![whiskers_1](https://cdn.hackclub.com/019f6221-b248-7a87-bcf6-774e500cdb14/whiskers_1.PNG)<br>
+![whiskers_2](https://cdn.hackclub.com/019f6221-c95d-79ae-9a50-6302930b3d7b/whiskers_2.PNG)<br>
+![whiskers_3](https://cdn.hackclub.com/019f6221-f9cf-7add-8238-775871b40309/whiskers_3.PNG)
 
 ## Built With
 

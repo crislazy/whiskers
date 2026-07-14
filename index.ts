@@ -312,8 +312,6 @@ app.message(async ({ message }) => {
 
 // Autorespond to messages in personal channel
 app.message(async ({ message }) => {
-    const requiresMention = !PERSONAL_CHANNEL_IDS.includes(message.channel);
-    if (requiresMention) return;
     if (!await statusFeature("autorespond"))return;
     if (message.subtype) return;
     if ("bot_id" in message && message.bot_id) return;
