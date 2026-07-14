@@ -57,6 +57,15 @@ const RESPONSES = [
     trigger: ["femboy"],
     reply: "UWU :cat-heart:",
     reaction: "uwu"
+  },
+  {
+    trigger: ["cookie"],
+    reply: "cookies are always appreciated 🍪"
+  },
+  {
+    trigger: ["bad bot"],
+    reply: "i'll do better next time... :(",
+    reaction: "cry"
   }
 ];
 
@@ -270,6 +279,8 @@ My code's runtime is: ${hours}h ${minutes}m ${seconds}s`
 
 // Autorespond to messages in channels the bot is (with mentions)
 app.message(async ({ message }) => {
+    const requiresMention = !PERSONAL_CHANNEL_IDS.includes(message.channel);
+    if (!requiresMention) return;
     if (!await statusFeature("autorespond"))return;
     if (message.subtype) return;
     if ("bot_id" in message && message.bot_id) return;
@@ -278,6 +289,35 @@ app.message(async ({ message }) => {
     if (!text.includes(`<@${USER_ID}>`) && !text.includes("whiskers")) {
         return;
     }
+
+    for (const response of RESPONSES) {
+        if (response.trigger.some(trigger => text.includes(trigger))) {
+            await client.chat.postMessage({
+                channel: message.channel,
+                thread_ts: message.thread_ts ?? message.ts,
+                text: response.reply,
+            });
+
+            if (response.reaction) {
+                await client.reactions.add({
+                    channel: message.channel,
+                    timestamp: message.ts,
+                    name: response.reaction,
+                });
+            }
+            return;
+        }
+    }
+});
+
+// Autorespond to messages in personal channel
+app.message(async ({ message }) => {
+    const requiresMention = !PERSONAL_CHANNEL_IDS.includes(message.channel);
+    if (requiresMention) return;
+    if (!await statusFeature("autorespond"))return;
+    if (message.subtype) return;
+    if ("bot_id" in message && message.bot_id) return;
+    const text = message.text?.toLowerCase() ?? "";
 
     for (const response of RESPONSES) {
         if (response.trigger.some(trigger => text.includes(trigger))) {
