@@ -20,14 +20,15 @@ function env(name: string): string {
 }
 
 const USER_ID = env("USER_ID");
-const PERSONAL_CHANNEL_IDS = env("PERSONAL_CHANNEL_IDS").split(",").map(id => id.trim());
+const PERSONAL_CHANNEL_ID = env("PERSONAL_CHANNEL_ID")
 const PERMITTED_USER_IDS = (process.env.PERMITTED_USER_IDS ?? USER_ID).split(",").map(id => id.trim());
 const LASTFM_USERNAME = env("LASTFM_USERNAME");
 const LASTFM_TOKEN = env("LASTFM_TOKEN");
-const HACKATIME_USER_ID = process.env.HACKATIME_USER_ID ?? USER_ID;
+const OWNER_ID = process.env.OWNER_ID ?? USER_ID;
 const SLACK_TOKEN = env("SLACK_TOKEN");
 const SLACK_APP_TOKEN = env("SLACK_APP_TOKEN");
-const SLACK_USER_TOKEN = env("SLACK_USER_TOKEN");
+const SLACK_USER_TOKEN = env("SLACK_USER_TOKEN")
+const TIMEZONE = process.env.TIMEZONE ?? "America/New_York"
 
 // Variables
 const startTime = Date.now();
@@ -76,11 +77,20 @@ const RESPONSES = [
 
 // Functions
 function isAllowed(id: string):boolean {
-    if (!PERMITTED_USER_IDS?.includes(id) && id !== USER_ID){
+    if (!PERMITTED_USER_IDS?.includes(id) && id !== USER_ID && id !== OWNER_ID){
         return false;
     } else {
         return true;
     }
+}
+
+function getToday() {
+    return new Intl.DateTimeFormat("en-CA", {
+        timeZone: TIMEZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).format(new Date());
 }
 
 const app = new App({
@@ -117,7 +127,7 @@ for (const feature of FEATURES){
 }
 console.log("------------------------------")
 
-// LastFM Listening Status
+// LastFM Listening Message
 let lastStatus = "";
 async function currentlyListening(){
     try {
@@ -136,49 +146,56 @@ async function currentlyListening(){
         const track = data.recenttracks.track[0];
 
         const nowPlaying = track["@attr"]?.nowplaying === "true";
-        if (nowPlaying) {
-            const status = `${track.name} - ${track.artist["#text"]}`
-            if (status !== lastStatus) {
-                await client.users.profile.set ({
-                    profile: {
-                        status_text: status,
-                        status_emoji: ":headphones:"
-                    }
-                })
-                lastStatus = status
-                console.log("LastFM Status: "+status)
-            } else return;
-        } else {
-            const status = ``
-            if (status !== lastStatus) {
-                await client.users.profile.set ({
-                    profile: {
-                        status_text: status,
-                        status_emoji: "",
-                        status_expiration: 0
-                    }
-                })
-                lastStatus = status
-                console.log("LastFM Status: "+status)
-            } else return;
+        if (!nowPlaying) {
+            lastStatus = "";
+            return;
         }
+        if (nowPlaying) {
+                const status = `${track.name} - ${track.artist["#text"]}`
+                if (status !== lastStatus) {
+                    lastStatus = status;
+                    await client.chat.postMessage({
+                        channel: PERSONAL_CHANNEL_ID,
+                        text: `🎵 <@${OWNER_ID}> is now listening to *${track.name}* by *${track.artist["#text"]}*`
+                    });
+                }
+            } 
     } catch (err) {
         console.error("LastFM:", err);
+    await client.chat.postMessage({
+        channel: PERSONAL_CHANNEL_ID,
+        text: "There was an error, check the terminal",
+    });
     }
-} 
+}
 
-// Hackatime Coding Time Stats
-let lastStatusCode = ""
-async function hackatimeStats(){
+// Hackatime Recap
+async function hackatimeStats(text: string, sender_id:string){
     try {
-        const today = new Date().toISOString().split("T")[0];
+        const mentions = [...text.matchAll(/<@([A-Z0-9]+)>/g)] as any;
 
+        let target_id = sender_id as any;
+
+        if (mentions.length >= 2) {
+            target_id = mentions[1][1];
+        }
+
+        const today = getToday()
+        
         const res = await fetch(
-        `https://hackatime.hackclub.com/api/v1/users/${HACKATIME_USER_ID}/stats?start_date=${today}`
+        `https://hackatime.hackclub.com/api/v1/users/${target_id}/stats?start_date=${today}`
         );
+        if (res.status === 404) {
+            return `<@${target_id}> doesn't have a Hackatime account linked.`;
+        }
+
+        if (res.status === 403) {
+            return `<@${target_id}> has disabled public stats`;
+        }
+
         if (!res.ok) {
             console.error(`Hackatime returned ${res.status}`);
-            return;
+            return `Hackatime returned an unexpected error (${res.status}).`;
         }
         const data = await res.json() as any;
         const totalSeconds = data.data.total_seconds;
@@ -186,21 +203,24 @@ async function hackatimeStats(){
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         let status = `Coded ${hours}h ${minutes}m today`;
         if (hours < 1) {
-            status = `Coded ${minutes}m today`;
+            status = `Coded ${minutes}m today :sadge:`;
         } else {
-            status = `Coded ${hours}h ${minutes}m today`;
+            status = `Coded ${hours}h ${minutes}m today :yay:`;
         }
+        const top = data.data.languages?.[0];
+        let topLanguage;
 
-        if (status !== lastStatusCode) {
-            await client.users.profile.set({
-                profile: {
-                    pronouns: status,
-                },
-            });
-
-            lastStatusCode = status;
-            console.log("Hackatime status: "+status);
+        if (top) {
+            topLanguage = `*${top.name}* (${top.text})`;
+        } else {
+            topLanguage = "None";
         }
+        const message = `<@${target_id}>'s daily coding recap:
+
+${status}
+Top language: ${topLanguage}
+🔥 Current streak: ${data.data.streak} days`
+        return message;
     } catch (err) {
         console.error("Hackatime:", err);
     }
@@ -227,8 +247,8 @@ app.message(async ({ message }) => {
                   type: "mrkdwn",
                   text: `I can do some cool stuff like:
 - Send a welcome message in personal channels when people join and also DM those people;
-- Set status automatically based on LastFM status;
-- Change the pronouns to the total time coded today;
+- Send an announcement for LastFM "Now Playing";
+- Show Hackatime coding recaps;
 - Auto respond to messages and DMs;
 
 I'm also totally not a femboy...`
@@ -279,37 +299,100 @@ My code's runtime is: ${hours}h ${minutes}m ${seconds}s`
     }
   } catch (err) {
     console.error("AutoDM: ", err)
+    await client.chat.postMessage({
+        channel: message.channel,
+        thread_ts: message.ts,
+        text: "There was an error, check the terminal",
+    });
   }
 });
 
 // Autorespond to messages in channels the bot is (with mentions)
 app.message(async ({ message }) => {
-    if (!await statusFeature("autorespond"))return;
-    if (message.subtype) return;
-    if ("bot_id" in message && message.bot_id) return;
-    const text = message.text?.toLowerCase() ?? "";
+    try {
+        if (!await statusFeature("autorespond"))return;
+        if (message.subtype) return;
+        if ("bot_id" in message && message.bot_id) return;
+        const text = (message.text ?? "").toLowerCase();
+        if (text.includes(`<@${USER_ID}> hackatime`.toLowerCase())) {
+            const info = await client.conversations.info({
+                channel: message.channel,
+            });
+            if (!info.channel?.is_member) return;
+            const recap = await hackatimeStats(message.text ?? "", message.user);
 
-    if (!text.includes(`<@${USER_ID}>`) && !text.includes("whiskers")) {
-        return;
-    }
+            if (recap) {
+                await client.chat.postMessage({
+                    channel: message.channel,
+                    thread_ts: message.thread_ts ?? message.ts,
+                    text: recap,
+                });
+            }
 
-    for (const response of RESPONSES) {
-        if (response.trigger.some(trigger => text.includes(trigger))) {
+            return;
+        } else if (text.includes(`<@${USER_ID}> help`.toLowerCase())) {
+            const info = await client.conversations.info({
+                channel: message.channel,
+            });
+            if (!info.channel?.is_member) return;
+            const responseList = RESPONSES.map(r =>
+                `• ${r.trigger.join(" / ")} → ${r.reply}`
+            ).join("\n");
             await client.chat.postMessage({
                 channel: message.channel,
                 thread_ts: message.thread_ts ?? message.ts,
-                text: response.reply,
-            });
+                text: `🐱 <@${USER_ID}> Help
 
-            if (response.reaction) {
-                await client.reactions.add({
-                    channel: message.channel,
-                    timestamp: message.ts,
-                    name: response.reaction,
+    *Commands*
+    • <@${USER_ID}> help
+    Shows this help menu.
+
+    • <@${USER_ID}> hackatime
+    Shows your coding recap.
+
+    • <@${USER_ID}> hackatime @user
+    Shows another user's coding recap.
+                    
+    *Auto Responses*
+    ${responseList}
+
+    Made with hate and anger by <@${OWNER_ID}>`,
                 });
-            }
+
             return;
         }
+        for (const response of RESPONSES) {
+            for (const trigger of response.trigger) {
+                if (text.includes(`<@${USER_ID}> ${trigger}`.toLowerCase())) {
+                    const info = await client.conversations.info({
+                        channel: message.channel,
+                    });
+                    if (!info.channel?.is_member) return;
+                    await client.chat.postMessage({
+                        channel: message.channel,
+                        thread_ts: message.thread_ts ?? message.ts,
+                        text: response.reply,
+                    });
+
+                    if (response.reaction) {
+                        await client.reactions.add({
+                            channel: message.channel,
+                            timestamp: message.ts,
+                            name: response.reaction,
+                        });
+                    }
+
+                    return;
+                }
+            }
+        }
+    } catch (err) {
+        console.error("AutoDM"+ err)
+        await client.chat.postMessage({
+            channel: message.channel,
+            thread_ts: message.ts,
+            text: "There was an error, check the terminal",
+        });
     }
 });
 
@@ -321,7 +404,7 @@ app.event("member_joined_channel", async ({ event }) => {
         const welcomeDmEnabled = await statusFeature("welcome_dm");
         const channel = event.channel
         const user = event.user
-        if (!PERSONAL_CHANNEL_IDS.includes(channel)) return;
+        if (PERSONAL_CHANNEL_ID !== channel) return;
 
         if (welcomeMessageEnabled) {
 
@@ -341,7 +424,7 @@ app.event("member_joined_channel", async ({ event }) => {
                 channel: dm.channel.id,
                 text: `Hi <@${user}>! 👋
 
-Welcome! I'm *Whiskers*, your friendly selfbot. :cat-heart:
+Welcome to #${PERSONAL_CHANNEL_ID} :cat-heart:!
 
 Send me "hello" to see what I can do.`
             });
@@ -427,13 +510,3 @@ setInterval(async () => {
         await currentlyListening();
     }
 }, 30_000);
-
-if (await statusFeature("hackatime")) {
-    await hackatimeStats();
-}
-
-setInterval(async () => {
-    if (await statusFeature("hackatime")) {
-        await hackatimeStats();
-    }
-}, 60_000);

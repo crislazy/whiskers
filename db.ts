@@ -2,21 +2,21 @@ import sqlite3 from "sqlite3";
 
 const db = new sqlite3.Database("option-storage.db");
 
-// Stores features
-db.run(`
-CREATE TABLE IF NOT EXISTS options (
-    option TEXT PRIMARY KEY,
-    status TEXT NOT NULL
-);
-`);
+db.serialize(() => {
+    db.run(`
+        CREATE TABLE IF NOT EXISTS options (
+            option TEXT PRIMARY KEY,
+            status TEXT NOT NULL
+        );
+    `);
 
-// Stores the prefix
-db.run(`
-CREATE TABLE IF NOT EXISTS config (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-`);
+    db.run(`
+        CREATE TABLE IF NOT EXISTS config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+    `);
+});
 
 export function getFeature(option: string): Promise<string | null> {
   return new Promise((resolve, reject) => {
